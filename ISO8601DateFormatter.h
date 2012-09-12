@@ -28,6 +28,7 @@ enum {
 	ISO8601DateFormatCalendar,
 	ISO8601DateFormatOrdinal,
 	ISO8601DateFormatWeek,
+    ISO8601DateFormatTimeOnly   // Hsoi 12-Sep-2012 - added
 };
 typedef NSUInteger ISO8601DateFormat;
 

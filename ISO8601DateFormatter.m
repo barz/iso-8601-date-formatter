@@ -666,6 +666,13 @@ static BOOL is_leap_year(NSUInteger year);
 			return [self weekDateStringForDate:date timeZone:timeZone];
 		case ISO8601DateFormatOrdinal:
 			return [self stringFromDate:date formatString:ISO_ORDINAL_DATE_FORMAT timeZone:timeZone];
+        case ISO8601DateFormatTimeOnly:
+        {
+            // Hsoi 12-Sep-2012 - added. I needed a setup that could work with JUST time, not date. This seemed
+            // like it could do it.
+            self.includeTime = YES;
+			return [self stringFromDate:date formatString:@"" timeZone:timeZone];
+        }
 		default:
 			[NSException raise:NSInternalInconsistencyException format:@"self.format was %lu, not calendar (%d), week (%d), or ordinal (%d)", (unsigned long)self.format, ISO8601DateFormatCalendar, ISO8601DateFormatWeek, ISO8601DateFormatOrdinal];
 			return nil;
