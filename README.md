@@ -1,8 +1,11 @@
 # ISO 8601: The only date format worth using
 
+[![Image: Status of most recent build and test attempt.](https://travis-ci.org/boredzo/iso-8601-date-formatter.png?branch=master)](https://travis-ci.org/boredzo/iso-8601-date-formatter)
+[![Image: Test code coverage percentage.](https://coveralls.io/repos/boredzo/iso-8601-date-formatter/badge.png?branch=master)](https://coveralls.io/r/boredzo/iso-8601-date-formatter?branch=master)
+
 Obligatory relevant [xkcd](http://xkcd.com/):
 
-[![Seriously now. "ISO 8601 was published on 06/05/88 and most recently amended on 12/01/04."](http://imgs.xkcd.com/comics/iso_8601.png)](http://xkcd.com/1179/)
+[![Seriously now. “ISO 8601 was published on 06/05/88 and most recently amended on 12/01/04.”](http://imgs.xkcd.com/comics/iso_8601.png)](http://xkcd.com/1179/)
 
 ## How to use this code in your program
 
@@ -10,26 +13,28 @@ Add the source files to your project.
 
 ### Parsing
 
-Create an ISO 8601 date formatter, then call [formatter dateFromString:myString]. The method will return either an NSDate or nil.
+Create an ISO 8601 date formatter, then call `[formatter dateFromString:myString]`. The method will return either an NSDate or `nil`.
 
-There are a total of six parser methods. The one that contains the actual parser is -[ISO8601DateFormatter dateComponentsFromString:timeZone:range:]. The other five are based on this one.
+There are a total of six parser methods. The one that contains the actual parser is `-[ISO8601DateFormatter dateComponentsFromString:timeZone:range:]`. The other five are based on this one.
 
-The "outTimeZone" parameter, when not set to NULL, is a pointer to an NSTimeZone *variable. If the string specified a time zone, you'll receive the time zone object in that variable. If the string didn't specify a time zone, you'll receive nil.
+The “`outTimeZone`” parameter, when not set to `NULL`, is a pointer to an `NSTimeZone *`variable. If the string specified a time zone, you'll receive the time zone object in that variable. If the string didn't specify a time zone, you'll receive `nil`.
 
-The "outRange" parameter, when not set to NULL, is a pointer to NSRange storage. You will receive the range of the parsed substring in that storage.
+The “`outRange`” parameter, when not set to `NULL`, is a pointer to `NSRange` storage. You will receive the range of the parsed substring in that storage.
 
 ### Unparsing
 
-Create an ISO 8601 date formatter, then call [formatter stringFromDate:myDate]. The method will return a string.
+Create an ISO 8601 date formatter, then call `[formatter stringFromDate:myDate]`. The method will return a string.
 
 The formatter has several properties that control its behavior:
 
 * You can set the format of the resulting strings. By default, the formatter will generate calendar-date strings; your other options are week dates and ordinal dates.
-* You can set a default time zone; by default, it will use [NSTimeZone defaultTimeZone].
+* You can set a default time zone; by default, it will use `[NSTimeZone defaultTimeZone]`.
 * You can enable a strict mode, wherein the formatter enforces sanity checks on the string. By default, the parser will afford you quite a bit of leeway.
-* You can set whether to include the time in the string, and if so, what hour-minute separator to use (default ':').
+* You can set whether to include the time in the string, and if so, what hour-minute separator to use (default `':'`).
 
 ## How to test that this code works
+
+UPDATE from the year 2013: Conversion from the old make-based test monsters to modern OCUnit-based tests is underway. Contributions of new and old test cases will be greatly appreciated.
 
 'make test' will perform all tests. If you want to perform only *some* tests:
 
@@ -76,8 +81,8 @@ Changes in 0.4 from 0.3:
 
 Changes in 0.3 from 0.2:
 
-* Colin Barrett noticed that I used %m instead of %M when creating the time strings. Oops.
-* Colin also noticed that I had the ?: in -ISO8601DateStringWithTime: the wrong way around. Oops again.
+* Colin Barrett noticed that I used `%m` instead of `%M` when creating the time strings. Oops.
+* Colin also noticed that I had the `?:` in `ISO8601DateStringWithTime:` the wrong way around. Oops again.
 
 Changes in 0.2 from 0.1:
 
@@ -104,7 +109,7 @@ When a date is parsed that has a year but no century, this implementation adds t
 
 The implementation is tolerant of out-of-range numbers. For example, "2005-13-40T24:62:89" == 1:02 AM on 2006-02-10. Notice that the month (13 > 12), date (40 > 31), hour (24 > 23), minute (62 > 59), and second (89 > 59) are all out-of-range.
 
-As mentioned above, there is a "strict" mode that enforces sanity checks. In particular, the date must be the entire contents of the string, and numbers are range-checked. If you have any suggestions on how to make this mode more strict, contact me.
+As mentioned above, there is a "strict" mode that enforces sanity checks. In particular, the date must be the entire contents of the string, and numbers are range-checked. If you have any suggestions on how to make this mode more strict, please file an enhancement request in the Issues section.
 
 ### Unparsing
 
@@ -122,4 +127,4 @@ I use [Rick McCarty's algorithm for converting calendar dates to week dates](htt
 
 ## Copyright
 
-This code is copyright 2006–2011 Peter Hosey. It is under the BSD license; see LICENSE.txt for the full text of the license.
+This code is copyright 2006–2013 Peter Hosey. It is under the BSD license; see LICENSE.txt for the full text of the license.

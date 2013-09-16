@@ -62,7 +62,7 @@ extern unichar ISO8601DefaultTimeSeparatorCharacter;
 
 - (NSDateComponents *) dateComponentsFromString:(NSString *)string;
 - (NSDateComponents *) dateComponentsFromString:(NSString *)string timeZone:(out NSTimeZone **)outTimeZone;
-- (NSDateComponents *) dateComponentsFromString:(NSString *)string timeZone:(out NSTimeZone **)outTimeZone range:(out NSRange *)outRange;
+- (NSDateComponents *) dateComponentsFromString:(NSString *)string timeZone:(out NSTimeZone **)outTimeZone range:(out NSRange *)outRange fractionOfSecond:(NSTimeInterval *)outFractionOfSecond;
 
 - (NSDate *) dateFromString:(NSString *)string;
 - (NSDate *) dateFromString:(NSString *)string timeZone:(out NSTimeZone **)outTimeZone;
@@ -73,6 +73,7 @@ extern unichar ISO8601DefaultTimeSeparatorCharacter;
 @property ISO8601DateFormat format;
 @property BOOL includeTime;
 @property unichar timeSeparator;
+@property unichar timeZoneSeparator;
 
 - (NSString *) stringFromDate:(NSDate *)date;
 - (NSString *) stringFromDate:(NSDate *)date timeZone:(NSTimeZone *)timeZone;
