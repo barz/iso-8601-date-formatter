@@ -1,16 +1,19 @@
 /*ISO8601DateFormatter.m
  *
  *Created by Peter Hosey on 2009-04-11.
- *Copyright 2009 Peter Hosey. All rights reserved.
+ *Copyright 2009–2013 Peter Hosey. All rights reserved.
  */
 
 #import <Foundation/Foundation.h>
+#if TARGET_OS_IPHONE
+#	import <UIKit/UIKit.h>
+#endif
 #import "ISO8601DateFormatter.h"
 
 #ifndef DEFAULT_TIME_SEPARATOR
 #	define DEFAULT_TIME_SEPARATOR ':'
 #endif
-unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
+const unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
 
 //Unicode date formats.
 #define ISO_CALENDAR_DATE_FORMAT @"yyyy-MM-dd"
@@ -21,6 +24,12 @@ unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
 #define ISO_TIMEZONE_UTC_FORMAT @"Z"
 #define ISO_TIMEZONE_OFFSET_FORMAT_NO_SEPARATOR @"%+.2d%.2d"
 #define ISO_TIMEZONE_OFFSET_FORMAT_WITH_SEPARATOR @"%+.2d%C%.2d"
+
+@interface ISO8601DateFormatter ()
++ (void) createGlobalCachesThatDoNotAlreadyExist;
+//Used when a memory warning occurs (if at least one ISO 8601 Date Formatter exists at the time).
++ (void) purgeGlobalCaches;
+@end
 
 @interface ISO8601DateFormatter(UnparsingPrivate)
 
@@ -33,9 +42,21 @@ unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
 
 static NSMutableDictionary *timeZonesByOffset;
 
-@implementation ISO8601DateFormatter
+#if ISO8601_TESTING_PURPOSES_ONLY
+//This method only exists for use by the project's test cases. DO NOT use this in an application.
+extern bool ISO8601DateFormatter_GlobalCachesAreWarm(void);
 
+bool ISO8601DateFormatter_GlobalCachesAreWarm(void) {
+	return (timeZonesByOffset != nil) && (timeZonesByOffset.count > 0);
+}
+#endif
+
+@implementation ISO8601DateFormatter
 + (void) initialize {
+	[self createGlobalCachesThatDoNotAlreadyExist];
+}
+
++ (void) createGlobalCachesThatDoNotAlreadyExist {
 	if (!timeZonesByOffset) {
 		timeZonesByOffset = [[NSMutableDictionary alloc] init];
 	}
@@ -63,10 +84,22 @@ static NSMutableDictionary *timeZonesByOffset;
 		timeSeparator = ISO8601DefaultTimeSeparatorCharacter;
 		includeTime = NO;
 		parsesStrictly = NO;
+
+#if TARGET_OS_IPHONE
+		[[NSNotificationCenter defaultCenter] addObserver:self
+			selector:@selector(didReceiveMemoryWarning:)
+			name:UIApplicationDidReceiveMemoryWarningNotification
+			object:nil];
+#endif
 	}
 	return self;
 }
+
 - (void) dealloc {
+#if TARGET_OS_IPHONE
+	[[NSNotificationCenter defaultCenter] removeObserver:self name:UIApplicationDidReceiveMemoryWarningNotification object:nil];
+#endif
+
 	[defaultTimeZone release];
 
 	[unparsingFormatter release];
@@ -75,6 +108,10 @@ static NSMutableDictionary *timeZonesByOffset;
 	[unparsingCalendar release];
 
 	[super dealloc];
+}
+
+- (void) didReceiveMemoryWarning:(NSNotification *)notification {
+	[[self class] purgeGlobalCaches];
 }
 
 @synthesize defaultTimeZone;
@@ -204,10 +241,8 @@ static BOOL is_leap_year(NSUInteger year);
 	} else {
 		//Skip leading whitespace.
 		NSUInteger i = 0U;
-		for(NSUInteger len = strlen((const char *)ch); i < len; ++i) {
-			if (!isspace(ch[i]))
-				break;
-		}
+		while (isspace(ch[i]))
+			++i;
 
 		range.location = i;
 		ch += i;
@@ -259,7 +294,7 @@ static BOOL is_leap_year(NSUInteger year);
 					break;
 
 				case 6: //YYMMDD (implicit century)
-					if (num_leading_hyphens > 0U)
+					if (num_leading_hyphens > 0U || strict)
 						isValidDate = NO;
 					else {
 						day = segment % 100U;
@@ -287,8 +322,12 @@ static BOOL is_leap_year(NSUInteger year);
 								segment = read_segment(ch, &ch, &num_digits);
 								switch(num_digits) {
 									case 4: //MMDD
-										day = segment % 100U;
-										month_or_week = segment / 100U;
+										if (strict)
+											isValidDate = NO;
+										else {
+											day = segment % 100U;
+											month_or_week = segment / 100U;
+										}
 										break;
 
 									case 2: //MM
@@ -530,6 +569,7 @@ static BOOL is_leap_year(NSUInteger year);
 				switch(*ch) {
 					case 'Z':
 						timeZone = [NSTimeZone timeZoneWithAbbreviation:@"UTC"];
+						++ch; //So that the Z is included in the range.
 						break;
 
 					case '+':
@@ -558,6 +598,8 @@ static BOOL is_leap_year(NSUInteger year);
 								tz_minute = segment;
 								if (negative) tz_minute = -tz_minute;
 							}
+
+							[[self class] createGlobalCachesThatDoNotAlreadyExist];
 
 							NSInteger timeZoneOffset = (tz_hour * 3600) + (tz_minute * 60);
 							NSNumber *offsetNum = [NSNumber numberWithInteger:timeZoneOffset];
@@ -664,6 +706,7 @@ static BOOL is_leap_year(NSUInteger year);
 @synthesize format;
 @synthesize includeTime;
 @synthesize timeSeparator;
+@synthesize timeZoneSeparator;
 
 - (NSString *) replaceColonsInString:(NSString *)timeFormat withTimeSeparator:(unichar)timeSep {
 	if (timeSep != ':') {
@@ -699,7 +742,7 @@ static BOOL is_leap_year(NSUInteger year);
 			return [self stringFromDate:date formatString:@"" timeZone:timeZone];
         }
 		default:
-			[NSException raise:NSInternalInconsistencyException format:@"self.format was %lu, not calendar (%d), week (%d), or ordinal (%d)", (unsigned long)self.format, ISO8601DateFormatCalendar, ISO8601DateFormatWeek, ISO8601DateFormatOrdinal];
+			[NSException raise:NSInternalInconsistencyException format:@"self.format was %tu, not calendar (%tu), week (%tu), or ordinal (%tu)", self.format, ISO8601DateFormatCalendar, ISO8601DateFormatWeek, ISO8601DateFormatOrdinal];
 			return nil;
 	}
 }
