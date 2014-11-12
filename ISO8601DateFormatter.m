@@ -4,6 +4,7 @@
  *Copyright 2009–2013 Peter Hosey. All rights reserved.
  */
 
+#import <float.h>
 #import <Foundation/Foundation.h>
 #if TARGET_OS_IPHONE
 #	import <UIKit/UIKit.h>
@@ -20,10 +21,13 @@ const unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
 //#define ISO_WEEK_DATE_FORMAT @"YYYY-'W'ww-ee" //Doesn't actually work because NSDateComponents counts the weekday starting at 1.
 #define ISO_ORDINAL_DATE_FORMAT @"yyyy-DDD"
 #define ISO_TIME_FORMAT @"HH:mm:ss"
+#define ISO_TIME_FORMAT_MS_PRECISION @"HH:mm:ss.SSS"
 //printf formats.
 #define ISO_TIMEZONE_UTC_FORMAT @"Z"
 #define ISO_TIMEZONE_OFFSET_FORMAT_NO_SEPARATOR @"%+.2d%.2d"
 #define ISO_TIMEZONE_OFFSET_FORMAT_WITH_SEPARATOR @"%+.2d%C%.2d"
+
+static NSString * const ISO8601TwoCharIntegerFormat = @"%.2d";
 
 @interface ISO8601DateFormatter ()
 + (void) createGlobalCachesThatDoNotAlreadyExist;
@@ -40,14 +44,22 @@ const unichar ISO8601DefaultTimeSeparatorCharacter = DEFAULT_TIME_SEPARATOR;
 
 @end
 
-static NSMutableDictionary *timeZonesByOffset;
+@interface ISO8601TimeZoneCache: NSObject
+{}
+
+//The property being read-only means that the formatter cannot change the cache's dictionary, but the formatter is explicitly allowed to mutate the dictionary.
+@property(nonatomic, readonly, strong) NSMutableDictionary *timeZonesByOffset;
+
+@end
+
+static ISO8601TimeZoneCache *timeZoneCache;
 
 #if ISO8601_TESTING_PURPOSES_ONLY
 //This method only exists for use by the project's test cases. DO NOT use this in an application.
 extern bool ISO8601DateFormatter_GlobalCachesAreWarm(void);
 
 bool ISO8601DateFormatter_GlobalCachesAreWarm(void) {
-	return (timeZonesByOffset != nil) && (timeZonesByOffset.count > 0);
+	return (timeZoneCache != nil) && (timeZoneCache.timeZonesByOffset.count > 0);
 }
 #endif
 
@@ -57,14 +69,14 @@ bool ISO8601DateFormatter_GlobalCachesAreWarm(void) {
 }
 
 + (void) createGlobalCachesThatDoNotAlreadyExist {
-	if (!timeZonesByOffset) {
-		timeZonesByOffset = [[NSMutableDictionary alloc] init];
+	if (!timeZoneCache) {
+		timeZoneCache = [[ISO8601TimeZoneCache alloc] init];
 	}
 }
 
 + (void) purgeGlobalCaches {
-	NSMutableDictionary *oldCache = timeZonesByOffset;
-	timeZonesByOffset = nil;
+	ISO8601TimeZoneCache *oldCache = timeZoneCache;
+	timeZoneCache = nil;
 	[oldCache release];
 }
 
@@ -84,6 +96,7 @@ bool ISO8601DateFormatter_GlobalCachesAreWarm(void) {
 		timeSeparator = ISO8601DefaultTimeSeparatorCharacter;
 		includeTime = NO;
 		parsesStrictly = NO;
+		useMillisecondPrecision = NO;
 
 #if TARGET_OS_IPHONE
 		[[NSNotificationCenter defaultCenter] addObserver:self
@@ -603,11 +616,11 @@ static BOOL is_leap_year(NSUInteger year);
 
 							NSInteger timeZoneOffset = (tz_hour * 3600) + (tz_minute * 60);
 							NSNumber *offsetNum = [NSNumber numberWithInteger:timeZoneOffset];
-							timeZone = [timeZonesByOffset objectForKey:offsetNum];
+							timeZone = [timeZoneCache.timeZonesByOffset objectForKey:offsetNum];
 							if (!timeZone) {
 								timeZone = [NSTimeZone timeZoneForSecondsFromGMT:timeZoneOffset];
 								if (timeZone)
-									[timeZonesByOffset setObject:timeZone forKey:offsetNum];
+									[timeZoneCache.timeZonesByOffset setObject:timeZone forKey:offsetNum];
 							}
 						}
 				}
@@ -705,6 +718,7 @@ static BOOL is_leap_year(NSUInteger year);
 
 @synthesize format;
 @synthesize includeTime;
+@synthesize useMillisecondPrecision;
 @synthesize timeSeparator;
 @synthesize timeZoneSeparator;
 
@@ -748,8 +762,11 @@ static BOOL is_leap_year(NSUInteger year);
 }
 
 - (NSString *) stringFromDate:(NSDate *)date formatString:(NSString *)dateFormat timeZone:(NSTimeZone *)timeZone {
-	if (includeTime)
-		dateFormat = [dateFormat stringByAppendingFormat:@"'T'%@", [self replaceColonsInString:ISO_TIME_FORMAT withTimeSeparator:self.timeSeparator]];
+	if (includeTime){
+		NSString *timeFormat = self.useMillisecondPrecision ? ISO_TIME_FORMAT_MS_PRECISION : ISO_TIME_FORMAT;
+		dateFormat = [dateFormat stringByAppendingFormat:@"'T'%@", [self replaceColonsInString:timeFormat withTimeSeparator:self.timeSeparator]];
+	}
+	
 
 	if ([dateFormat isEqualToString:lastUsedFormatString] == NO) {
 		[unparsingFormatter release];
@@ -777,12 +794,17 @@ static BOOL is_leap_year(NSUInteger year);
 		if (offset == 0)
 			str = [str stringByAppendingString:ISO_TIMEZONE_UTC_FORMAT];
 		else {
-			int timeZoneOffsetHour = (int)(offset / 60);
-			int timeZoneOffsetMinute = (int)(offset % 60);
-			if (self.timeZoneSeparator)
-				str = [str stringByAppendingFormat:ISO_TIMEZONE_OFFSET_FORMAT_WITH_SEPARATOR, timeZoneOffsetHour, self.timeZoneSeparator, timeZoneOffsetMinute];
-			else
-				str = [str stringByAppendingFormat:ISO_TIMEZONE_OFFSET_FORMAT_NO_SEPARATOR, timeZoneOffsetHour, timeZoneOffsetMinute];
+			int timeZoneOffsetHour = abs((int)(offset / 60));
+			int timeZoneOffsetMinute = abs((int)(offset % 60));
+            
+            if (offset > 0) str = [str stringByAppendingString:@"+"];
+            else str = [str stringByAppendingString:@"-"];
+            
+            str = [str stringByAppendingFormat:ISO8601TwoCharIntegerFormat, timeZoneOffsetHour];
+            
+            if (self.timeZoneSeparator) str = [str stringByAppendingFormat:@"%C", self.timeZoneSeparator];
+            
+            str = [str stringByAppendingFormat:ISO8601TwoCharIntegerFormat, timeZoneOffsetMinute];
 		}
 	}
 
@@ -867,7 +889,9 @@ static BOOL is_leap_year(NSUInteger year);
 		NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
 		unichar timeSep = self.timeSeparator;
 		if (!timeSep) timeSep = ISO8601DefaultTimeSeparatorCharacter;
-		formatter.dateFormat = [self replaceColonsInString:ISO_TIME_FORMAT withTimeSeparator:timeSep];
+		
+		NSString *timeFormat = self.useMillisecondPrecision ? ISO_TIME_FORMAT_MS_PRECISION : ISO_TIME_FORMAT;
+		formatter.dateFormat = [self replaceColonsInString:timeFormat withTimeSeparator:timeSep];
 		formatter.locale = [[[NSLocale alloc] initWithLocaleIdentifier:@"en_US_POSIX"] autorelease];
 		formatter.timeZone = timeZone;
 
@@ -1001,3 +1025,19 @@ static BOOL is_leap_year(NSUInteger year) {
 	&& (((year % 100U) != 0U)
 	||  ((year % 400U) == 0U));
 }
+
+static NSString *const ISO8601ThreadStorageTimeZoneCacheKey = @"org.boredzo.ISO8601ThreadStorageTimeZoneCacheKey";
+
+@implementation ISO8601TimeZoneCache: NSObject
+
+- (NSMutableDictionary *) timeZonesByOffset {
+	NSMutableDictionary *threadDict = [NSThread currentThread].threadDictionary;
+	NSMutableDictionary *currentCacheDict = [threadDict objectForKey:ISO8601ThreadStorageTimeZoneCacheKey];
+	if (currentCacheDict == nil) {
+		currentCacheDict = [NSMutableDictionary dictionaryWithCapacity:2UL];
+		[threadDict setObject:currentCacheDict forKey:ISO8601ThreadStorageTimeZoneCacheKey];
+	}
+	return currentCacheDict;
+}
+
+@end
